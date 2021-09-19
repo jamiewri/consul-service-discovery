@@ -1,0 +1,30 @@
+---
+- name: Configure Consul
+  hosts: localhost
+  gather_facts: true
+  become: true
+  vars_files:
+    - ./variables.yaml
+  tasks:
+    - shell: 'sudo dnf install epel-release -y'
+
+    - name: Install Consul
+      import_role:
+        name: consul
+
+    - name: Instal webserver
+      yum:
+        name: httpd
+
+    - name: Start web server
+      ansible.builtin.systemd:
+        state: started
+        name: httpd
+        enabled: true
+
+    - name: permit traffic in default zone for http service
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+

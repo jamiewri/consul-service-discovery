@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# Use the GCE Servie account to configure the default application credentials for the gcloud cli.
+#gcloud init \
+#  --skip-diagnostics \
+#  --console-only \
+#  --no-launch-browser \
+#  --account bastion@devopstower.iam.gserviceaccount.com \
+#  --project devopstower
+
+# Set some defaults for the gcloud cli
+gcloud config set account bastion@devopstower.iam.gserviceaccount.com
+gcloud config set project devopstower
+gcloud config set compute/zone australia-southeast1-a
+
+# Use the gcloud cli to generate out kubeconfig for cluster-1
+gcloud container clusters get-credentials  --zone australia-southeast1-a --project devopstower cluster-1
+
+# At this point we should have vault, consult and kubectl clis all correctly configured
+
+# Install the kubernetes dashboard project
+# The dashboard will be available at http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0/aio/deploy/recommended.yaml
+
+
+# Onboard the cluster to vault
+# Create the service account that the vault kubernetes auth engine will use
+cat <<EOF | kubectl apply -f -
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-auth
+  namespace: default
+EOF
+
+# Give the vault service account cluster-admin priviledges
+cat <<EOF | kubectl apply -f -
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: role-tokenreview-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: vault-auth
+  namespace: default
+EOF
+
+SECRET_NAME="$(kubectl get serviceaccount vault-auth -n default \
+  -o go-template='{{ (index .secrets 0).name }}')"
+
+TR_ACCOUNT_TOKEN="$(kubectl get secret "${SECRET_NAME}" -n default \
+  -o go-template='{{ .data.token }}' | base64 --decode)"
+
+FULL_GKE_NAME=gke_devopstower_australia-southeast1-a_cluster-1
+
+K8S_HOST="$(kubectl config view --raw \
+  -o go-template="{{ range .clusters }}{{ if eq .name \"${FULL_GKE_NAME}\" }}{{ index .cluster \"server\" }}{{ end }}{{ end }}")"
+
+K8S_CACERT="$(kubectl config view --raw \
+  -o go-template="{{ range .clusters }}{{ if eq .name \"${FULL_GKE_NAME}\" }}{{ index .cluster \"certificate-authority-data\" }}{{ end }}{{ end }}" | base64 --decode)"
+
+# Configure vaults kubernetes auth provider to point to cluster-1
+vault write auth/kubernetes/config \
+  kubernetes_host="${K8S_HOST}" \
+  kubernetes_ca_cert="${K8S_CACERT}" \
+  token_reviewer_jwt="${TR_ACCOUNT_TOKEN}"
+
+
+# Install the Vault injector w/ external vault into the default namespace
+helm repo add hashicorp https://helm.releases.hashicorp.com
+
+helm install vault-injector hashicorp/vault \
+  --set="injector.enabled=true" \
+  --set="injector.externalVaultAddr=http://vault.internal-gcp.openinfra.io:8200"
+
+# Create demo data
+vault kv put secrets/web-app/jamie secret=password
+
+# Create poicy that allows read only to demo data
+vault policy write web-app - << EOF
+path "secrets/web-app/*" {
+  capabilities = ["read"]
+}
+EOF
+
+# Configure the kubernetes auth provider to trust the web-app serviceAccount from the default namespace
+vault write auth/kubernetes/role/web-app-role \
+   bound_service_account_names=web-app \
+   bound_service_account_namespaces=default \
+   policies=web-app \
+   ttl=15m

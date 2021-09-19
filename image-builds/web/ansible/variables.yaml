@@ -1,0 +1,4 @@
+---
+consul_version: 1.10.2+ent
+consul_server: true
+consul_ui: true

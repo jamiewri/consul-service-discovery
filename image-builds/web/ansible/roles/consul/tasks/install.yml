@@ -1,0 +1,47 @@
+---
+- name: Consul | Install dependencies
+  yum:
+    name: "{{ consul_required_libs }}"
+
+- name: Consul | Install python dependencies
+  pip:
+    name: "{{ consul_required_python_libs }}"
+
+- name: Consul | Ensure Consul group
+  group:
+    name: "{{ consul_group }}"
+
+- name: Consul | Ensure Consul user
+  user:
+    name: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    createhome: no
+
+- name: Consul | Ensure Consul skeleton path
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+  with_items:
+    - "{{ consul_bindir }}"
+    - "{{ consul_configdir }}"
+    - "{{ consul_datadir }}"
+    - "{{ consul_logdir }}"
+
+- shell: 'sudo chown -R consul:consul /opt/consul'
+
+- name: Consul | Download and extract Consul
+  unarchive:
+    src: "{{ consul_url }}"
+    dest: "{{ consul_bindir }}"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    remote_src: yes
+  notify: restart consul
+
+- name: Consul | Link binary
+  file:
+    src: "{{ consul_bindir }}/consul"
+    dest: /usr/bin/consul
+    state: link

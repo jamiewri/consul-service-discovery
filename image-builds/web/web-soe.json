@@ -1,0 +1,40 @@
+{
+ "variables": {
+   "ssh_user": "packer",
+   "ssh_key": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD2rx1N/xzfqnP1jfW6Womv1ovpHmO6KYdOluPpBxHtQlrVyzJtiQYfmA3bmNWUc5fOIRghLD+sCUf24oubRn8IwPIM67h1UBCxsB1SwJGWxvljGI5roItQ7QooHrwrscykw4hNAdKyN7qmZC3WaohRJy65055WR2ueaZvKKAIrvd5iCZvbm65BCYG1NzkQMfHuk+9euJToiVKzcHf8CZsTGqR3+p+gwyH+Y11otYkovwUlR9Ds/TzbxCa18HtikCRil58RbNMg0gklXu1nQdJfw0VVO9cpx6QWrtbz64YDrciKMgKs1TojIrx3kUZw6MtML5RZ0iUQKe9M+2b69h5X"
+ },
+ "builders": [
+   {
+     "type": "googlecompute",
+     "project_id": "devopstower",
+     "source_image": "centos-8-v20201216",
+     "ssh_username": "packer",
+     "zone": "australia-southeast1-a",
+     "image_name": "web",
+     "metadata":  {
+       "sshKeys": "{{user `ssh_user`}}:{{user `ssh_key`}} {{user `ssh_user`}}"
+     }
+
+   }
+ ],
+ "provisioners": [
+   {
+     "type": "shell",
+     "inline": [
+        "sleep 30",
+        "sudo yum install epel-release -y",
+        "sudo yum install ansible -y"
+        ]
+   },
+   {
+     "type": "file",
+     "source": "./ansible",
+     "destination": "/home/packer"
+   },
+   {
+    "type": "shell",
+    "inline": ["ansible-playbook -c local ./ansible/configure.yaml"]
+   }
+ ] 
+}
+
