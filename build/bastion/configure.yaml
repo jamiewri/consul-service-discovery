@@ -1,0 +1,61 @@
+---
+- name: SOE Configuration playbook
+  hosts: localhost
+  become: true
+  tasks:
+    - name: Update all
+      yum:
+        name: '*'
+        state: latest
+
+    - name: Add YUM repository | Kubernetes
+      yum_repository:
+        name: Kubernetes
+        description: Official Kubernetes RPM repo
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        gpgkey:
+          - https://packages.cloud.google.com/yum/doc/yum-key.gpg
+          - https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        gpgcheck: true
+
+    - name: Add YUM repository | HashiCorp
+      yum_repository:
+        name: HashiCorp
+        description: Official HashiCorp RPM repo
+        baseurl: https://rpm.releases.hashicorp.com/RHEL/$releasever/$basearch/stable
+        gpgkey: https://rpm.releases.hashicorp.com/gpg
+        gpgcheck: true
+
+    - name: Install kubectl
+      yum:
+        name:
+          - kubectl
+          - vault
+          - consul
+          - git
+          - bind-utils
+          - docker
+          - podman
+
+    - name: Download and unzip the Helm binary
+      ansible.builtin.unarchive:
+        src: "https://get.helm.sh/helm-v3.5.1-linux-amd64.tar.gz"
+        dest: "/tmp"
+        remote_src: true
+        mode: 0755
+
+    - name: Install the Helm Binary
+      ansible.builtin.copy:
+        src: "/tmp/linux-amd64/helm"
+        dest: "/usr/bin/helm"
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Delete tmp files
+      ansible.builtin.file:
+        path: "/tmp/linux-amd64"
+        state: absent
+
+    - name: Confirm completion
+      command: 'touch /root/done'

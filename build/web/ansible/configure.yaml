@@ -1,0 +1,31 @@
+---
+- name: Configure Consul and Apache
+  hosts: localhost
+  gather_facts: true
+  become: true
+  tasks:
+
+    - name: Install Consul Agent
+      import_role:
+        name: consul
+      vars:
+        consul_version: 1.10.2+ent
+        consul_server: false
+        consul_ui: false
+
+    - name: Install Apache
+      yum:
+        name: httpd
+
+    - name: Start Apache
+      ansible.builtin.systemd:
+        state: started
+        name: httpd
+        enabled: true
+
+    - name: Permit traffic in default zone for http service
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+

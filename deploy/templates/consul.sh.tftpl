@@ -1,0 +1,73 @@
+#!/bin/bash
+
+GCP_META_HOSTNAME=$(curl -s  -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/hostname")
+GCP_META_IPADDR_NIC0=$(curl -s  -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip")
+
+sudo cat << EOF > /opt/consul/consul.d/consul.json
+{
+  "node_name": "$GCP_META_HOSTNAME",
+  "ui_config":{
+    "enabled": true
+  },
+  "addresses":{
+    "http": "0.0.0.0"
+  },
+  "data_dir": "/opt/consul/data",
+  "log_level": "INFO",
+  "log_file": "/var/log/consul/consul.log",
+  "domain": "consul",
+  "datacenter": "devopstower",
+  "bind_addr": "0.0.0.0",
+  "advertise_addr": "$GCP_META_IPADDR_NIC0",
+  "client_addr": "$GCP_META_IPADDR_NIC0",
+  "ports": {
+    "http": 8500,
+    "dns": 8600
+  },
+  "server": true,
+  "enable_syslog": true,
+  "bootstrap_expect": 1,
+  "start_join": ["$GCP_META_HOSTNAME"],
+  "license_path": "/opt/consul/consul-license.hclic"
+}
+EOF
+
+# Register some dummy services
+sudo cat << EOF > /opt/consul/consul.d/services.json
+{
+  "services": [
+    {
+      "ID": "redis-1",
+      "Name": "redis",
+      "Tags": [
+        "primary"
+      ],
+      "Address": "10.10.2.10",
+      "Port": 8000,
+      "Meta": {
+        "redis_version": "4.0"
+      }
+    },
+    {
+      "ID": "redis-2",
+      "Name": "redis",
+      "Tags": [
+        "secondary"
+      ],
+      "Address": "10.10.2.11",
+      "Port": 8000,
+      "Meta": {
+        "redis_version": "4.0"
+      }
+    }
+  ]
+}
+EOF
+
+echo -n ${consul_license} >> /opt/consul/consul-license.hclic 2>&1
+sudo chown 750 /opt/consul/consul-license.hclic
+sudo chown consul:consul /opt/consul/consul-license.hclic
+sudo systemctl stop firewalld
+sleep 10
+sudo systemctl restart consul
+touch /home/packer/metadata-done

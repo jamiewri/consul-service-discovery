@@ -1,0 +1,51 @@
+#!/bin/bash
+
+GCP_META_HOSTNAME=$(curl -s  -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/hostname")
+GCP_META_IPADDR_NIC0=$(curl -s  -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip")
+
+sudo cat << EOF > /opt/consul/consul.d/consul.json
+{
+  "datacenter":"devopstower",
+  "data_dir":"/opt/consul",
+  "log_level":"INFO",
+  "node_name":"$GCP_META_HOSTNAME",
+  "retry_join":["${consul_internal_address}"],
+  "bind_addr":"{{GetInterfaceIP \"eth0\"}}",
+  "node_meta": {
+    "environment":"production",
+    "provisionedBy":"Terraform",
+    "productOwner":"Bruce.Willis",
+    "networkZone":"highTrust"
+  },
+  "license_path": "/opt/consul/consul-license.hclic"
+}
+EOF
+
+sudo cat << EOF > /opt/consul/consul.d/service.json
+{
+  "service": {
+    "name": "payments",
+    "tags": [
+      "frontend"
+    ],
+    "port": 80,
+    "check": {
+      "id": "counting_check",
+      "name": "Check Port 80",
+      "tcp": "localhost:80",
+      "interval": "1s",
+      "timeout": "1s"
+    }
+  }
+}
+EOF
+
+echo -n ${consul_license} >> /opt/consul/consul-license.hclic 2>&1
+sudo chown 750 /opt/consul/consul-license.hclic
+sudo chown consul:consul /opt/consul/consul-license.hclic
+sleep 10
+
+sudo systemctl restart consul
+sudo systemctl stop firewalld
+
+touch /home/packer/metadata-done

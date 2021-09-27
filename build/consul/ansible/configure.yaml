@@ -1,0 +1,13 @@
+---
+- name: Configure Consul
+  hosts: localhost
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Install Consul server
+      import_role:
+        name: consul
+      vars:
+        consul_version: 1.10.2+ent
+        consul_server: true
+        consul_ui: true
